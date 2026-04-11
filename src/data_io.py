@@ -6,14 +6,14 @@ import pandas as pd
 FILE = "data/steam_games_dataset.db"
 
 
-def get_data():
+def read_data():
     conn = sqlite3.connect(FILE)
-    df = pd.read_sql("SELECT * FROM games", conn)
+    df = pd.read_sql(sql="SELECT * FROM games", con=conn)
     conn.close()
     return df
 
 
 def write_data(df: pd.DataFrame):
     conn = sqlite3.connect(FILE)
-    df.to_sql("games", conn, if_exists="replace")
+    df.to_sql("games", conn, if_exists="replace", index=False)
     conn.close()
