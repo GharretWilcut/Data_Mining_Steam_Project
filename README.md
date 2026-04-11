@@ -2,7 +2,7 @@
 
 ## To get started 
 
-- create a venv 
-- run --> pip install -r requirements.txt
-- run the get_data.py to pull the data set (it was over a GB don't open csv or it crashes we may need to use a different datatype)
+- create a venv with `python3 -m venv .venv`
+- install packages with `pip install -r requirements.txt`
+- read the dataset into SQLite database with `python3 src/get_data.py`
  
