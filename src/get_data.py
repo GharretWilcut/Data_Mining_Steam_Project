@@ -1,5 +1,10 @@
-#get data from the csv to a df for us to run machine learning models
 import pandas as pd
-def get_data():
-    df = pd.read_csv('data/steam_games_dataset.csv')
-    return df
+
+from data_io import write_data
+
+if __name__ == "__main__":
+    df = pd.read_parquet(
+        "hf://datasets/FronkonGames/steam-games-dataset/data/train-00000-of-00001.parquet"
+    )
+
+    write_data(df, "data/steam_games_dataset.db")
