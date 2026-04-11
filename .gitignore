@@ -1,5 +1,6 @@
 #custom ignores
 data/steam_games_dataset.csv
+data/steam_games_dataset.db
 
 
 # Byte-compiled / optimized / DLL files

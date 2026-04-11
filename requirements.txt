@@ -2,3 +2,4 @@ pandas
 pyarrow
 fsspec
 huggingface_hub
+tables
