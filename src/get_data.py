@@ -1,11 +1,9 @@
-# get data from the csv to a df for us to run machine learning models
-import sqlite3
-
 import pandas as pd
 
+from data_io import write_data
 
-def get_data():
-    conn = sqlite3.connect("data/steam_games_dataset.db")
-    df = pd.read_sql("SELECT * FROM games", conn)
-    conn.close()
-    return df
+df = pd.read_parquet(
+    "hf://datasets/FronkonGames/steam-games-dataset/data/train-00000-of-00001.parquet"
+)
+
+write_data(df)
