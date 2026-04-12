@@ -7,4 +7,4 @@ if __name__ == "__main__":
         "hf://datasets/FronkonGames/steam-games-dataset/data/train-00000-of-00001.parquet"
     )
 
-    write_data(df, "data/steam_games_dataset.db")
+    write_data(df, "steam_games_dataset.db")

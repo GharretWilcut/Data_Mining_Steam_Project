@@ -61,7 +61,7 @@ Game Format
 """
 
 if __name__ == "__main__":
-    df = read_data("data/steam_games_dataset.db")
+    df = read_data("steam_games_dataset.db")
 
     # Hardcoded name imputation
     df.at[44432, "name"] = "The Spookening"
@@ -76,4 +76,4 @@ if __name__ == "__main__":
     # Feature Selection
     clean_df = pd.DataFrame(df)
 
-    write_data(clean_df, "data/steam_games_dataset_clean.db")
+    write_data(clean_df, "steam_games_dataset_clean.db")
