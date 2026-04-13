@@ -10,7 +10,7 @@ from sklearn.preprocessing import MultiLabelBinarizer, StandardScaler
 from data_io import read_data, write_data
 
 ss = StandardScaler()
-mlb = MultiLabelBinarizer()
+mlb: dict[str, MultiLabelBinarizer] = {}
 
 OWNER_COUNT_RANGES = [
     "0 - 0",
@@ -70,12 +70,13 @@ def preprocess(df: pd.DataFrame, fit: bool):
     for column in list_columns:
         column_contents = df[column].map(lambda x: x.split(","))
         if fit:
-            encoded = mlb.fit_transform(column_contents)
+            mlb[column] = MultiLabelBinarizer()
+            encoded = mlb[column].fit_transform(column_contents)
         else:
-            encoded = mlb.transform(column_contents)
+            encoded = mlb[column].transform(column_contents)
         labels = pd.DataFrame(
             encoded,
-            columns=mlb.classes_,
+            columns=mlb[column].classes_,
             index=df.index,
         )
         labels = labels.drop(columns=[""]).add_prefix(f"{column} ")
@@ -126,8 +127,8 @@ if __name__ == "__main__":
     df_train_processed, y_train = preprocess(df_train, True)
     df_test_processed, y_test = preprocess(df_test, False)
 
-    df_train_processed["owners_label"] = y_train
-    df_test_processed["owners_label"] = y_test
+    df_train_processed["estimated_owners"] = y_train
+    df_test_processed["estimated_owners"] = y_test
 
     write_data(df_train_processed, "steam_games_dataset_clean_training.db")
     write_data(df_test_processed, "steam_games_dataset_clean_testing.db")
