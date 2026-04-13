@@ -3,4 +3,4 @@ pyarrow
 fsspec
 huggingface_hub
 tables
-sklearn
+scikit-learn
