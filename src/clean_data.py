@@ -5,13 +5,29 @@ from datetime import datetime
 
 import pandas as pd
 from sklearn import model_selection
-from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer, StandardScaler
+from sklearn.preprocessing import MultiLabelBinarizer, StandardScaler
 
 from data_io import read_data, write_data
 
-standard_scaler = StandardScaler()
-label_binarizer = MultiLabelBinarizer()
-label_encoder = LabelEncoder()
+ss = StandardScaler()
+mlb = MultiLabelBinarizer()
+
+OWNER_COUNT_RANGES = [
+    "0 - 0",
+    "0 - 20000",
+    "20000 - 50000",
+    "50000 - 100000",
+    "100000 - 200000",
+    "200000 - 500000",
+    "500000 - 1000000",
+    "1000000 - 2000000",
+    "2000000 - 5000000",
+    "5000000 - 10000000",
+    "10000000 - 20000000",
+    "20000000 - 50000000",
+    "50000000 - 100000000",
+    "100000000 - 200000000",
+]
 
 
 def preprocess(df: pd.DataFrame, fit: bool):
@@ -29,10 +45,7 @@ def preprocess(df: pd.DataFrame, fit: bool):
     clean_df["age_in_days"] = dates.map(lambda x: (reference_date - x).days)
 
     # Label-encode estimated_owners and move to y
-    if fit:
-        y = pd.Series(label_encoder.fit_transform(df["estimated_owners"]))
-    else:
-        y = pd.Series(label_encoder.transform(df["estimated_owners"]))
+    y = df["estimated_owners"].map(lambda x: OWNER_COUNT_RANGES.index(x))
 
     # Boolean casted features
     clean_df["has_achievements"] = df["achievements"].map(lambda x: 0 if x == 0 else 1)
@@ -57,12 +70,12 @@ def preprocess(df: pd.DataFrame, fit: bool):
     for column in list_columns:
         column_contents = df[column].map(lambda x: x.split(","))
         if fit:
-            encoded = label_binarizer.fit_transform(column_contents)
+            encoded = mlb.fit_transform(column_contents)
         else:
-            encoded = label_binarizer.transform(column_contents)
+            encoded = mlb.transform(column_contents)
         labels = pd.DataFrame(
             encoded,
-            columns=label_binarizer.classes_,
+            columns=mlb.classes_,
             index=df.index,
         )
         labels = labels.drop(columns=[""]).add_prefix(f"{column} ")
@@ -81,13 +94,9 @@ def preprocess(df: pd.DataFrame, fit: bool):
 
     standard_columns = ["price", "dlc_count", "age_in_days", "package_count"]
     if fit:
-        clean_df[standard_columns] = standard_scaler.fit_transform(
-            clean_df[standard_columns]
-        )
+        clean_df[standard_columns] = ss.fit_transform(clean_df[standard_columns])
     else:
-        clean_df[standard_columns] = standard_scaler.transform(
-            clean_df[standard_columns]
-        )
+        clean_df[standard_columns] = ss.transform(clean_df[standard_columns])
 
     # TODO text embeddings/keyword extraction
     text_columns = ["name", "short_description", "detailed_description", "notes"]
@@ -115,17 +124,10 @@ if __name__ == "__main__":
     )
 
     df_train_processed, y_train = preprocess(df_train, True)
-
-    print("Training preprocessed")
-
     df_test_processed, y_test = preprocess(df_test, False)
-
-    print("Testing preprocessed")
 
     df_train_processed["owners_label"] = y_train
     df_test_processed["owners_label"] = y_test
-
-    print(df_train_processed)
 
     write_data(df_train_processed, "steam_games_dataset_clean_training.db")
     write_data(df_test_processed, "steam_games_dataset_clean_testing.db")
