@@ -9,3 +9,4 @@ torchvision
 numpy
 pillow
 tqdm
+requests

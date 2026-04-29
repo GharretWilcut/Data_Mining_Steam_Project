@@ -10,8 +10,8 @@ from PIL import Image
 import pandas as pd
 from tqdm import tqdm
 
-IMAGE_FOLER = "/data/images" # Pulls from a folder of images in data folder
-OUTPUT_FILE = "/data/embeddings.csv"
+IMAGE_FOLDER = "data/images" # Pulls from a folder of images in data folder
+OUTPUT_FILE = "data/embeddings.csv"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -32,7 +32,7 @@ transform = transforms.Compose([
 # LOADING MODEL #
 #################
 # Model Resnet50
-model = models.resnet50(pretrained = True)
+model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
 
 # Remove final classification layer
 model = nn.Sequential(*list(model.children())[:-1])
@@ -45,11 +45,11 @@ model.to(DEVICE)
 ##################
 data = []
 
-for filename in tqdm(os.listdir(IMAGE_FOLER)):
+for filename in tqdm(os.listdir(IMAGE_FOLDER)):
     if not filename.lower().endswith((".png", ".jpg", ".jpeg")):
         continue
 
-    path = os.path.join(IMAGE_FOLER, filename)
+    path = os.path.join(IMAGE_FOLDER, filename)
 
     try:
         image = Image.open(path).convert("RGB")
