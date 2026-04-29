@@ -118,19 +118,8 @@ if __name__ == "__main__":
     # Hardcoded name imputation
     df_full.at[44432, "name"] = "The Spookening"
 
-    df_train: pd.DataFrame
-    df_test: pd.DataFrame
-    df_train, df_test = model_selection.train_test_split(
-        df_full, test_size=0.25, random_state=42
-    )
-
-    df_train_processed, y_train = preprocess(df_train, True)
-    df_test_processed, y_test = preprocess(df_test, False)
-
-    df_train_processed["estimated_owners"] = y_train
-    df_test_processed["estimated_owners"] = y_test
-
-    write_data(df_train_processed, "steam_games_dataset_clean_training.db")
-    write_data(df_test_processed, "steam_games_dataset_clean_testing.db")
+    df_full_processed, y = preprocess(df_full, True)
+    df_full_processed["estimated_owners"] = y
+    df_full_processed.to_csv("./data/steam_games_dataset_clean.csv", index=False)
 
     print("Data written")

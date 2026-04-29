@@ -21,7 +21,7 @@ if __name__ == "__main__":
         "screenshots",
         "movies",
     ):
-        df[list_column] = df[list_column].map(lambda langs: ",".join(langs))
-    df["packages"] = df["packages"].map(lambda langs: json.dumps(langs))
+        df[list_column] = df[list_column].map(lambda x: ",".join(x))
+    df["packages"] = df["packages"].map(lambda x: json.dumps(x))
 
     write_data(df, "steam_games_dataset.db")
