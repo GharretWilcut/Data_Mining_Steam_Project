@@ -15,6 +15,7 @@ You might just be able to use this key, but I'm not sure
 STEAM_API_KEY = "8A6DC3DB995E263AC32BC5049AF00CC6"
 
 MAX_GAMES = 5000 # Set to integer for testing, set to None to download all
+START_INDEX = 30000
 
 OUTPUT_DIR = "data/images"
 DELAY = 0.2 
@@ -39,8 +40,8 @@ def get_steam_app_list():
 
 
 
-def filter_games_only(apps, max_games=None):
-    # Trim list to max_games if set.
+def filter_games_only(apps, start_index=0, max_games=None):
+    apps = apps[start_index:]          # skip already downloaded
     if max_games:
         apps = apps[:max_games]
     return apps
@@ -86,5 +87,5 @@ def download_images(apps, output_dir, delay=0.2):
 
 if __name__ == "__main__":
     apps = get_steam_app_list()
-    apps = filter_games_only(apps, max_games=MAX_GAMES)
+    apps = filter_games_only(apps, start_index=START_INDEX, max_games=MAX_GAMES)
     download_images(apps, output_dir=OUTPUT_DIR, delay=DELAY)
