@@ -10,3 +10,5 @@ numpy
 pillow
 tqdm
 requests
+aiohttp 
+aiofiles

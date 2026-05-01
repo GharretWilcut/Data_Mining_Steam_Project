@@ -14,7 +14,7 @@ You might just be able to use this key, but I'm not sure
 """
 STEAM_API_KEY = "8A6DC3DB995E263AC32BC5049AF00CC6"
 
-MAX_GAMES = 10 # Set to integer for testing, set to None to download all
+MAX_GAMES = None # Set to integer for testing, set to None to download all
 
 OUTPUT_DIR = "data/images"
 DELAY = 0.2 
