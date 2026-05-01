@@ -9,10 +9,12 @@ from torchvision import models, transforms
 from PIL import Image
 import pandas as pd
 from tqdm import tqdm
+from sklearn.decomposition import PCA
 
 IMAGE_FOLDER = "data/images" # Pulls from a folder of images in data folder
 OUTPUT_FILE = "data/embeddings.csv"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+N_COMPONENTS = 512
 
 
 ##############
@@ -75,6 +77,15 @@ for filename in tqdm(os.listdir(IMAGE_FOLDER)):
 ###############
 columns = ["game_id"] + [f"f{i}" for i in range(len(data[0]) - 1)]
 df = pd.DataFrame(data, columns=columns)
-df.to_csv(OUTPUT_FILE, index=False)
+
+# Reduce dimensions with PCA
+feature_cols = df.drop(columns=["game_id"])
+pca = PCA(n_components=N_COMPONENTS)
+reduced = pca.fit_transform(feature_cols)
+print(f"Variance retained: {pca.explained_variance_ratio_.sum():.2%}")
+
+result = pd.DataFrame(reduced, columns=[f"pc{i}" for i in range(N_COMPONENTS)])
+result.insert(0, "game_id", df["game_id"])
+result.to_csv(OUTPUT_FILE, index=False)
 
 print(f"Saved embeddings to {OUTPUT_FILE}")
