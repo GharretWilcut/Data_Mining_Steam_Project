@@ -10,28 +10,21 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-# Mean Squared Error = (1/n) * SUMMATION (y_i - yhat_i)^2
 def mse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.mean((y_true - y_pred) ** 2))
 
 
-# Mean Absolute Error = (1/n) * SUMMATION |y_i - yhat_i|
 def mae(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.mean(np.abs(y_true - y_pred)))
 
 
-# Computes the coefficient of determination R^2.
 def r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    # R^2 = 1 - RSS/TSS
-    # RSS = SUMMATION (y_i - yhat_i)^2,  TSS = SUMMATION (y_i - y)^2
     ss_res = np.sum((y_true - y_pred) ** 2)
     ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
     return float(1.0 - ss_res / ss_tot) if ss_tot > 0 else 0.0
 
 
 def soft_threshold(rho: float, alpha: float) -> float:
-    # Used by Lasso coordinate descent.
-    # This is what pushes small coefficients exactly to 0.
     if rho < -alpha:
         return rho + alpha
     elif rho > alpha:
@@ -40,7 +33,6 @@ def soft_threshold(rho: float, alpha: float) -> float:
         return 0.0
 
 
-# Lasso regression using coordinate descent
 class LassoRegression:
     def __init__(self, alpha: float = 1.0, max_iter: int = 5000, tol: float = 1e-6):
         self.alpha = float(alpha)
@@ -108,16 +100,10 @@ def clean_numeric_data(df: pd.DataFrame, target_col: str) -> Tuple[pd.DataFrame,
     for col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Drop rows where the target is missing.
     df = df.dropna(subset=[target_col])
-
-    # Use every column except the target as a feature.
     feature_cols = [col for col in df.columns if col != target_col]
-
-    # Drop feature columns that are completely empty after numeric conversion.
     feature_cols = [col for col in feature_cols if not df[col].isna().all()]
 
-    # Fill missing feature values with each feature's median.
     for col in feature_cols:
         median_value = df[col].median()
         if pd.isna(median_value):
@@ -127,7 +113,6 @@ def clean_numeric_data(df: pd.DataFrame, target_col: str) -> Tuple[pd.DataFrame,
     return df, feature_cols
 
 
-# Randomly splits row indices into training/validation/test partitions.
 def split_dataset(
     total_rows: int,
     train_fraction: float = 0.7,
@@ -150,7 +135,6 @@ def split_dataset(
 
 # Fit standardization parameters on X and return the standardized X.
 def standardize_fit(X: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    # x' = (x - mean) / std
     mu = X.mean(axis=0)
     sigma = X.std(axis=0, ddof=0)
     sigma[sigma == 0] = 1.0
@@ -187,7 +171,6 @@ def compute_roc_curve(y_binary: np.ndarray, scores: np.ndarray) -> Tuple[np.ndar
     fpr_values = np.array(fpr_values)
     tpr_values = np.array(tpr_values)
 
-    # Sort by FPR before calculating area under the curve.
     order = np.argsort(fpr_values)
     fpr_sorted = fpr_values[order]
     tpr_sorted = tpr_values[order]
@@ -259,17 +242,13 @@ def train_and_eval(
     y_valid = y[validation_rows]
     y_test = y[test_rows]
 
-    # Train Lasso only
     lasso = LassoRegression(alpha=alpha, max_iter=5000, tol=1e-6)
     lasso.fit(X_train, y_train)
 
-    # Predictions
     yhat_train = lasso.predict(X_train)
     yhat_valid = lasso.predict(X_valid)
     yhat_test = lasso.predict(X_test)
 
-    # For ROC/truth table, convert the regression target into a binary label.
-    # High owners = estimated_owners >= median estimated_owners in the training split.
     owner_threshold = float(np.median(y_train))
 
     y_test_binary = (y_test >= owner_threshold).astype(int)
@@ -335,19 +314,15 @@ def train_and_eval(
 
 
 def main():
-    # You can run this file either by passing the CSV path:
-    #   python lasso_regression_only.py steam_games_dataset_clean.csv
-    #
-    # Or by setting the default path below.
     if len(sys.argv) >= 2:
         data_file = sys.argv[1]
     else:
         data_file = r"C:\Users\gregc\OneDrive\Desktop\git\Data_Mining_Steam_Project\data\steam_games_dataset_clean.csv"
 
     seed = 3245
-    # seed = int(time.time()) ^ random.getrandbits(16)  # uncomment for random seed
+    # seed = int(time.time()) ^ random.getrandbits(16)
 
-    alpha = 1.0  # Lasso regularization strength
+    alpha = 1.0
     target_col = "estimated_owners"
 
     output_dir = "./lasso_regression_outputs"

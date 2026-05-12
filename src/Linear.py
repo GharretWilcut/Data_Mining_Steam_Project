@@ -9,10 +9,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-# -----------------------------
-# Regression metrics
-# -----------------------------
-
 def mse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.mean((y_true - y_pred) ** 2))
 
@@ -26,10 +22,6 @@ def r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
     return float(1.0 - ss_res / ss_tot) if ss_tot > 0 else 0.0
 
-
-# -----------------------------
-# Linear Regression from scratch
-# -----------------------------
 
 class LinearRegression:
     def __init__(self):
@@ -55,10 +47,7 @@ class LinearRegression:
         return self.intercept_ + X @ self.coef_
 
 
-# -----------------------------
 # Data loading
-# -----------------------------
-
 def load_data(path: str) -> pd.DataFrame:
     ext = os.path.splitext(path)[1].lower()
 
@@ -87,10 +76,8 @@ def load_data(path: str) -> pd.DataFrame:
     raise ValueError(f"Unsupported file extension: {ext}")
 
 
-# -----------------------------
-# Splitting and preprocessing
-# -----------------------------
 
+# Splitting and preprocessing
 def split_dataset(
     total_rows: int,
     train_fraction: float = 0.70,
@@ -146,10 +133,7 @@ def clean_dataframe(df: pd.DataFrame, target_col: str) -> pd.DataFrame:
     return df
 
 
-# -----------------------------
 # ROC curve and truth table
-# -----------------------------
-
 def make_binary_labels(y_true: np.ndarray, threshold: float) -> np.ndarray:
     # 1 means the game has at least the threshold number of estimated owners
     # 0 means below the threshold
@@ -241,10 +225,6 @@ def confusion_truth_table(y_binary: np.ndarray, y_scores: np.ndarray, threshold:
 
     return table
 
-
-# -----------------------------
-# Training and evaluation
-# -----------------------------
 
 def train_and_eval(
     df: pd.DataFrame,
@@ -345,12 +325,8 @@ def train_and_eval(
 
 
 def main():
-    # Change this path to your CSV or DB file.
-    # Example CSV:
     data_file = r"C:\Users\gregc\OneDrive\Desktop\Data_Mining_Steam_Project\data\steam_games_dataset_clean.csv"
 
-    # If you want to pass the file path from the terminal instead, run:
-    # python Linear_Regression_Only.py path_to_your_file.csv
     if len(sys.argv) >= 2:
         data_file = sys.argv[1]
 

@@ -9,24 +9,20 @@ import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestRegressor
 
 
-# Mean Squared Error = (1/n) * SUMMATION (y_i - yhat_i)^2
 def mse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.mean((y_true - y_pred) ** 2))
 
 
-# Mean Absolute Error = (1/n) * SUMMATION |y_i - yhat_i|
 def mae(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.mean(np.abs(y_true - y_pred)))
 
 
-# Computes the coefficient of determination R^2.
 def r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     ss_res = np.sum((y_true - y_pred) ** 2)
     ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
     return float(1.0 - ss_res / ss_tot) if ss_tot > 0 else 0.0
 
 
-# Load a dataset from CSV into a pandas DataFrame.
 def load_data(path: str) -> pd.DataFrame:
     ext = os.path.splitext(path)[1].lower()
     if ext in [".csv", ".txt"]:
@@ -37,7 +33,6 @@ def load_data(path: str) -> pd.DataFrame:
         raise ValueError(f"Unsupported file extension: {ext}")
 
 
-# Convert columns to numeric, replace bad/missing values, and remove unusable columns.
 def clean_numeric_data(df: pd.DataFrame, target_col: str) -> Tuple[pd.DataFrame, List[str]]:
     if target_col not in df.columns:
         raise ValueError(f"Target column '{target_col}' was not found in the dataset.")
@@ -61,7 +56,6 @@ def clean_numeric_data(df: pd.DataFrame, target_col: str) -> Tuple[pd.DataFrame,
     return df, feature_cols
 
 
-# Randomly splits row indices into training/validation/test partitions.
 def split_dataset(
     total_rows: int,
     train_fraction: float = 0.7,
@@ -82,7 +76,6 @@ def split_dataset(
     return train_rows, validate_rows, test_rows
 
 
-# Compute ROC curve manually from binary labels and prediction scores.
 def compute_roc_curve(y_binary: np.ndarray, scores: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
     thresholds = np.r_[np.inf, np.sort(np.unique(scores))[::-1], -np.inf]
 
@@ -116,7 +109,6 @@ def compute_roc_curve(y_binary: np.ndarray, scores: np.ndarray) -> Tuple[np.ndar
     return fpr_sorted, tpr_sorted, thresholds, auc
 
 
-# Save ROC curve image.
 def save_roc_curve(y_binary: np.ndarray, scores: np.ndarray, output_path: str) -> float:
     fpr, tpr, thresholds, auc = compute_roc_curve(y_binary, scores)
 
@@ -134,7 +126,6 @@ def save_roc_curve(y_binary: np.ndarray, scores: np.ndarray, output_path: str) -
     return auc
 
 
-# Create a truth table / confusion matrix using a threshold.
 def create_truth_table(y_true: np.ndarray, y_pred: np.ndarray, threshold: float) -> pd.DataFrame:
     actual_binary = (y_true >= threshold).astype(int)
     predicted_binary = (y_pred >= threshold).astype(int)
@@ -155,11 +146,10 @@ def create_truth_table(y_true: np.ndarray, y_pred: np.ndarray, threshold: float)
     return truth_table
 
 
-# Save regression plots.
 def save_regression_plots(y_test: np.ndarray, yhat_test: np.ndarray, output_dir: str):
     residuals = y_test - yhat_test
 
-    # 1. Actual vs Predicted
+    # Actual vs Predicted
     plt.figure(figsize=(7, 5))
     plt.scatter(y_test, yhat_test, alpha=0.6)
 
@@ -174,7 +164,7 @@ def save_regression_plots(y_test: np.ndarray, yhat_test: np.ndarray, output_dir:
     plt.savefig(os.path.join(output_dir, "actual_vs_predicted.png"), dpi=300)
     plt.close()
 
-    # 2. Residual Plot
+    # Residual Plot
     plt.figure(figsize=(7, 5))
     plt.scatter(yhat_test, residuals, alpha=0.6)
     plt.axhline(0, linestyle="--")
@@ -186,7 +176,7 @@ def save_regression_plots(y_test: np.ndarray, yhat_test: np.ndarray, output_dir:
     plt.savefig(os.path.join(output_dir, "residual_plot.png"), dpi=300)
     plt.close()
 
-    # 3. Error Histogram
+    # Error Histogram
     plt.figure(figsize=(7, 5))
     plt.hist(residuals, bins=30)
 
@@ -247,8 +237,6 @@ def train_and_eval(
     y_valid = y[validation_rows]
     y_test = y[test_rows]
 
-    # Train Random Forest Regressor
-    # Note: Random Forest does not require feature standardization
     rfr = RandomForestRegressor(
         n_estimators=n_estimators,
         max_depth=max_depth,
@@ -260,13 +248,10 @@ def train_and_eval(
 
     rfr.fit(X_train, y_train)
 
-    # Predictions
     yhat_train = rfr.predict(X_train)
     yhat_valid = rfr.predict(X_valid)
     yhat_test = rfr.predict(X_test)
 
-    # For ROC/truth table, convert the regression target into a binary label.
-    # High owners = estimated_owners >= median estimated_owners in the training split.
     owner_threshold = float(np.median(y_train))
 
     y_test_binary = (y_test >= owner_threshold).astype(int)
@@ -344,10 +329,6 @@ def train_and_eval(
 
 
 def main():
-    # You can run this file either by passing the CSV path:
-    #   python RandomForest.py steam_games_dataset_clean.csv
-    #
-    # Or by setting the default path below.
     if len(sys.argv) >= 2:
         data_file = sys.argv[1]
     else:
@@ -361,7 +342,7 @@ def main():
 
     # Hyperparameters
     n_estimators = 100
-    max_depth = None       # None = grow trees until leaves are pure
+    max_depth = None
     min_samples_split = 2
     min_samples_leaf = 1
 
@@ -380,7 +361,6 @@ def main():
         min_samples_leaf=min_samples_leaf,
     )
 
-    # Output results to json
     with open(os.path.join(output_dir, "metrics.json"), "w") as f:
         json.dump(results, f, indent=2)
 
