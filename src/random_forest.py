@@ -1,63 +1,210 @@
 import os
+import sys
 import json
+from typing import List, Tuple, Dict, Any
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import (
-    classification_report,
-    confusion_matrix,
-    ConfusionMatrixDisplay,
-    roc_curve,
-    auc,
-)
-from sklearn.preprocessing import label_binarize
-
-from clean_data import OWNER_COUNT_RANGES
-from data_io import read_data
+from sklearn.ensemble import RandomForestRegressor
 
 
-def get_class_name(label):
-    """
-    Converts numeric class labels into readable owner count range names.
-    Example: 0 -> OWNER_COUNT_RANGES[0]
-    """
-    try:
-        label_int = int(label)
-        if 0 <= label_int < len(OWNER_COUNT_RANGES):
-            return OWNER_COUNT_RANGES[label_int]
-    except Exception:
-        pass
-
-    return str(label)
+# Mean Squared Error = (1/n) * SUMMATION (y_i - yhat_i)^2
+def mse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    return float(np.mean((y_true - y_pred) ** 2))
 
 
-def save_confusion_matrix_plot(y_true, y_pred, labels, class_names, output_dir):
-    cm = confusion_matrix(y_true, y_pred, labels=labels)
+# Mean Absolute Error = (1/n) * SUMMATION |y_i - yhat_i|
+def mae(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    return float(np.mean(np.abs(y_true - y_pred)))
 
-    cm_df = pd.DataFrame(
-        cm,
-        index=[f"Actual {name}" for name in class_names],
-        columns=[f"Predicted {name}" for name in class_names],
-    )
 
-    cm_df.to_csv(os.path.join(output_dir, "truth_table.csv"))
+# Computes the coefficient of determination R^2.
+def r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    ss_res = np.sum((y_true - y_pred) ** 2)
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    return float(1.0 - ss_res / ss_tot) if ss_tot > 0 else 0.0
 
-    plt.figure(figsize=(10, 8))
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
-    disp.plot(xticks_rotation=45, values_format="d")
-    plt.title("Random Forest Confusion Matrix")
+
+# Load a dataset from CSV into a pandas DataFrame.
+def load_data(path: str) -> pd.DataFrame:
+    ext = os.path.splitext(path)[1].lower()
+    if ext in [".csv", ".txt"]:
+        return pd.read_csv(path)
+    elif ext in [".xlsx", ".xls"]:
+        return pd.read_excel(path)
+    else:
+        raise ValueError(f"Unsupported file extension: {ext}")
+
+
+# Convert columns to numeric, replace bad/missing values, and remove unusable columns.
+def clean_numeric_data(df: pd.DataFrame, target_col: str) -> Tuple[pd.DataFrame, List[str]]:
+    if target_col not in df.columns:
+        raise ValueError(f"Target column '{target_col}' was not found in the dataset.")
+
+    df = df.copy()
+
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df = df.dropna(subset=[target_col])
+
+    feature_cols = [col for col in df.columns if col != target_col]
+    feature_cols = [col for col in feature_cols if not df[col].isna().all()]
+
+    for col in feature_cols:
+        median_value = df[col].median()
+        if pd.isna(median_value):
+            median_value = 0.0
+        df[col] = df[col].fillna(median_value)
+
+    return df, feature_cols
+
+
+# Randomly splits row indices into training/validation/test partitions.
+def split_dataset(
+    total_rows: int,
+    train_fraction: float = 0.7,
+    val_fraction: float = 0.1,
+    seed: int = 42
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    rng = np.random.default_rng(seed)
+    all_rows = np.arange(total_rows)
+    rng.shuffle(all_rows)
+
+    n_train = int(train_fraction * total_rows)
+    n_val = int(val_fraction * total_rows)
+
+    train_rows = all_rows[:n_train]
+    validate_rows = all_rows[n_train:n_train + n_val]
+    test_rows = all_rows[n_train + n_val:]
+
+    return train_rows, validate_rows, test_rows
+
+
+# Compute ROC curve manually from binary labels and prediction scores.
+def compute_roc_curve(y_binary: np.ndarray, scores: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    thresholds = np.r_[np.inf, np.sort(np.unique(scores))[::-1], -np.inf]
+
+    positives = np.sum(y_binary == 1)
+    negatives = np.sum(y_binary == 0)
+
+    fpr_values = []
+    tpr_values = []
+
+    for threshold in thresholds:
+        pred_binary = (scores >= threshold).astype(int)
+
+        tp = np.sum((pred_binary == 1) & (y_binary == 1))
+        fp = np.sum((pred_binary == 1) & (y_binary == 0))
+
+        tpr = tp / positives if positives > 0 else 0.0
+        fpr = fp / negatives if negatives > 0 else 0.0
+
+        tpr_values.append(tpr)
+        fpr_values.append(fpr)
+
+    fpr_values = np.array(fpr_values)
+    tpr_values = np.array(tpr_values)
+
+    order = np.argsort(fpr_values)
+    fpr_sorted = fpr_values[order]
+    tpr_sorted = tpr_values[order]
+
+    auc = float(np.trapz(tpr_sorted, fpr_sorted))
+
+    return fpr_sorted, tpr_sorted, thresholds, auc
+
+
+# Save ROC curve image.
+def save_roc_curve(y_binary: np.ndarray, scores: np.ndarray, output_path: str) -> float:
+    fpr, tpr, thresholds, auc = compute_roc_curve(y_binary, scores)
+
+    plt.figure(figsize=(7, 5))
+    plt.plot(fpr, tpr, label=f"Random Forest ROC curve, AUC = {auc:.4f}")
+    plt.plot([0, 1], [0, 1], linestyle="--", label="Random baseline")
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("ROC Curve for Predicting High Estimated Owners")
+    plt.legend()
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "confusion_matrix.png"), dpi=300)
+    plt.savefig(output_path, dpi=300)
     plt.close()
 
-    return cm_df
+    return auc
 
 
-def save_feature_importance_plot(model, feature_cols, output_dir):
-    importances = model.feature_importances_
-    importance_series = pd.Series(importances, index=feature_cols)
+# Create a truth table / confusion matrix using a threshold.
+def create_truth_table(y_true: np.ndarray, y_pred: np.ndarray, threshold: float) -> pd.DataFrame:
+    actual_binary = (y_true >= threshold).astype(int)
+    predicted_binary = (y_pred >= threshold).astype(int)
+
+    tn = int(np.sum((actual_binary == 0) & (predicted_binary == 0)))
+    fp = int(np.sum((actual_binary == 0) & (predicted_binary == 1)))
+    fn = int(np.sum((actual_binary == 1) & (predicted_binary == 0)))
+    tp = int(np.sum((actual_binary == 1) & (predicted_binary == 1)))
+
+    truth_table = pd.DataFrame(
+        {
+            "Predicted Low Owners": [tn, fn],
+            "Predicted High Owners": [fp, tp],
+        },
+        index=["Actual Low Owners", "Actual High Owners"]
+    )
+
+    return truth_table
+
+
+# Save regression plots.
+def save_regression_plots(y_test: np.ndarray, yhat_test: np.ndarray, output_dir: str):
+    residuals = y_test - yhat_test
+
+    # 1. Actual vs Predicted
+    plt.figure(figsize=(7, 5))
+    plt.scatter(y_test, yhat_test, alpha=0.6)
+
+    min_val = min(np.min(y_test), np.min(yhat_test))
+    max_val = max(np.max(y_test), np.max(yhat_test))
+    plt.plot([min_val, max_val], [min_val, max_val], linestyle="--")
+
+    plt.xlabel("Actual Estimated Owners")
+    plt.ylabel("Predicted Estimated Owners")
+    plt.title("Actual vs Predicted Estimated Owners")
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "actual_vs_predicted.png"), dpi=300)
+    plt.close()
+
+    # 2. Residual Plot
+    plt.figure(figsize=(7, 5))
+    plt.scatter(yhat_test, residuals, alpha=0.6)
+    plt.axhline(0, linestyle="--")
+
+    plt.xlabel("Predicted Estimated Owners")
+    plt.ylabel("Residuals")
+    plt.title("Residual Plot")
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "residual_plot.png"), dpi=300)
+    plt.close()
+
+    # 3. Error Histogram
+    plt.figure(figsize=(7, 5))
+    plt.hist(residuals, bins=30)
+
+    plt.xlabel("Prediction Error: Actual - Predicted")
+    plt.ylabel("Number of Games")
+    plt.title("Distribution of Prediction Errors")
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "error_histogram.png"), dpi=300)
+    plt.close()
+
+
+# Save Random Forest feature importance plot.
+def save_feature_importance_plot(
+    feature_cols: List[str],
+    feature_importances: np.ndarray,
+    output_dir: str
+):
+    importance_series = pd.Series(feature_importances, index=feature_cols)
 
     importance_series = importance_series.reindex(
         importance_series.abs().sort_values(ascending=False).head(20).index
@@ -74,259 +221,194 @@ def save_feature_importance_plot(model, feature_cols, output_dir):
     plt.close()
 
 
-def save_class_distribution_plot(y_train, y_test, class_names, labels, output_dir):
-    train_counts = pd.Series(y_train).value_counts().reindex(labels, fill_value=0)
-    test_counts = pd.Series(y_test).value_counts().reindex(labels, fill_value=0)
+# Train Random Forest regression and compute metrics.
+def train_and_eval(
+    df: pd.DataFrame,
+    feature_cols: List[str],
+    target_col: str,
+    seed: int,
+    output_dir: str,
+    n_estimators: int = 100,
+    max_depth: int = None,
+    min_samples_split: int = 2,
+    min_samples_leaf: int = 1,
+) -> Dict[str, Any]:
+    X = df[feature_cols].to_numpy(dtype=float)
+    y = df[target_col].to_numpy(dtype=float)
 
-    distribution_df = pd.DataFrame({
-        "train_count": train_counts.values,
-        "test_count": test_counts.values,
-    }, index=class_names)
+    # Split data
+    training_rows, validation_rows, test_rows = split_dataset(len(df), 0.7, 0.1, seed)
 
-    distribution_df.to_csv(os.path.join(output_dir, "class_distribution.csv"))
+    X_train = X[training_rows]
+    X_valid = X[validation_rows]
+    X_test = X[test_rows]
 
-    distribution_df.plot(kind="bar", figsize=(10, 6))
+    y_train = y[training_rows]
+    y_valid = y[validation_rows]
+    y_test = y[test_rows]
 
-    plt.xlabel("Owner Count Class")
-    plt.ylabel("Number of Games")
-    plt.title("Class Distribution in Train and Test Sets")
-    plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "class_distribution.png"), dpi=300)
-    plt.close()
-
-
-def save_per_class_f1_plot(report_dict, output_dir):
-    rows = []
-
-    for class_name, metrics in report_dict.items():
-        if isinstance(metrics, dict) and "f1-score" in metrics:
-            rows.append({
-                "class": class_name,
-                "f1_score": metrics["f1-score"],
-            })
-
-    f1_df = pd.DataFrame(rows)
-
-    if len(f1_df) == 0:
-        return
-
-    f1_df.to_csv(os.path.join(output_dir, "per_class_f1_scores.csv"), index=False)
-
-    plt.figure(figsize=(10, 6))
-    plt.bar(f1_df["class"], f1_df["f1_score"])
-
-    plt.xlabel("Owner Count Class")
-    plt.ylabel("F1 Score")
-    plt.title("Per-Class F1 Scores")
-    plt.xticks(rotation=45, ha="right")
-    plt.ylim(0, 1)
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "per_class_f1_scores.png"), dpi=300)
-    plt.close()
-
-
-def save_multiclass_roc_curve(model, X_test, y_test, labels, class_names, output_dir):
-    """
-    Creates a one-vs-rest ROC curve for multiclass classification.
-    This works because RandomForestClassifier has predict_proba().
-    """
-    if not hasattr(model, "predict_proba"):
-        print("ROC curve skipped because model does not support predict_proba().")
-        return None
-
-    y_score = model.predict_proba(X_test)
-
-    # Binarize true labels for one-vs-rest ROC
-    y_test_bin = label_binarize(y_test, classes=labels)
-
-    # If there are only two classes, label_binarize returns one column.
-    # Convert it into two columns for consistency.
-    if y_test_bin.shape[1] == 1:
-        y_test_bin = np.hstack([1 - y_test_bin, y_test_bin])
-
-    roc_results = {}
-
-    plt.figure(figsize=(8, 6))
-
-    for i, class_name in enumerate(class_names):
-        if i >= y_score.shape[1]:
-            continue
-
-        fpr, tpr, _ = roc_curve(y_test_bin[:, i], y_score[:, i])
-        roc_auc = auc(fpr, tpr)
-
-        roc_results[class_name] = float(roc_auc)
-
-        plt.plot(fpr, tpr, label=f"{class_name}, AUC = {roc_auc:.4f}")
-
-    plt.plot([0, 1], [0, 1], linestyle="--", label="Random baseline")
-
-    plt.xlabel("False Positive Rate")
-    plt.ylabel("True Positive Rate")
-    plt.title("Random Forest Multiclass ROC Curve")
-    plt.legend(fontsize=8)
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "roc_curve.png"), dpi=300)
-    plt.close()
-
-    with open(os.path.join(output_dir, "roc_auc_scores.json"), "w") as f:
-        json.dump(roc_results, f, indent=2)
-
-    return roc_results
-
-
-if __name__ == "__main__":
-    output_dir = "./random_forest_classifier_outputs"
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Load cleaned training and testing data.
-    df_train = read_data("steam_games_dataset_clean_training.db")
-    df_test = read_data("steam_games_dataset_clean_testing.db")
-
-    print("Data loaded")
-
-    target_col = "estimated_owners"
-
-    X_train = df_train.drop(columns=[target_col])
-    y_train = df_train[target_col]
-
-    X_test = df_test.drop(columns=[target_col])
-    y_test = df_test[target_col]
-
-    # Make sure test columns match training columns.
-    X_test = X_test[X_train.columns]
-
-    # Train model.
-    rf = RandomForestClassifier(
-        n_estimators=100,
-        random_state=3245,
-        class_weight="balanced"
+    # Train Random Forest Regressor
+    # Note: Random Forest does not require feature standardization
+    rfr = RandomForestRegressor(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        min_samples_split=min_samples_split,
+        min_samples_leaf=min_samples_leaf,
+        random_state=seed,
+        n_jobs=-1,
     )
 
-    rf.fit(X_train, y_train)
+    rfr.fit(X_train, y_train)
 
-    # Predictions.
-    y_pred = rf.predict(X_test)
+    # Predictions
+    yhat_train = rfr.predict(X_train)
+    yhat_valid = rfr.predict(X_valid)
+    yhat_test = rfr.predict(X_test)
 
-    labels = list(rf.classes_)
-    class_names = [get_class_name(label) for label in labels]
+    # For ROC/truth table, convert the regression target into a binary label.
+    # High owners = estimated_owners >= median estimated_owners in the training split.
+    owner_threshold = float(np.median(y_train))
 
-    # Classification report.
-    report_dict = classification_report(
-        y_test,
-        y_pred,
-        labels=labels,
-        target_names=class_names,
-        output_dict=True,
-        zero_division=0
+    y_test_binary = (y_test >= owner_threshold).astype(int)
+    roc_auc = save_roc_curve(
+        y_test_binary,
+        yhat_test,
+        os.path.join(output_dir, "roc_curve.png")
     )
 
-    report_text = classification_report(
-        y_test,
-        y_pred,
-        labels=labels,
-        target_names=class_names,
-        zero_division=0
-    )
+    truth_table = create_truth_table(y_test, yhat_test, owner_threshold)
+    truth_table.to_csv(os.path.join(output_dir, "truth_table.csv"))
 
-    print(report_text)
-
-    report_df = pd.DataFrame(report_dict).transpose()
-    report_df.to_csv(os.path.join(output_dir, "classification_report.csv"))
-
-    # Prediction table.
     prediction_table = pd.DataFrame({
-        "actual_class": y_test,
-        "predicted_class": y_pred,
-        "actual_class_name": [get_class_name(label) for label in y_test],
-        "predicted_class_name": [get_class_name(label) for label in y_pred],
+        "actual_estimated_owners": y_test,
+        "predicted_estimated_owners": yhat_test,
+        "actual_class": np.where(y_test >= owner_threshold, "High Owners", "Low Owners"),
+        "predicted_class": np.where(yhat_test >= owner_threshold, "High Owners", "Low Owners"),
     })
 
-    prediction_table.to_csv(
-        os.path.join(output_dir, "prediction_table.csv"),
-        index=False
-    )
+    prediction_table.to_csv(os.path.join(output_dir, "prediction_table.csv"), index=False)
 
-    # Confusion matrix / truth table.
-    save_confusion_matrix_plot(
-        y_true=y_test,
-        y_pred=y_pred,
-        labels=labels,
-        class_names=class_names,
+    save_regression_plots(
+        y_test=y_test,
+        yhat_test=yhat_test,
         output_dir=output_dir
     )
 
-    # Feature importance graph.
     save_feature_importance_plot(
-        model=rf,
-        feature_cols=X_train.columns,
+        feature_cols=feature_cols,
+        feature_importances=rfr.feature_importances_,
         output_dir=output_dir
     )
 
-    # Class distribution graph.
-    save_class_distribution_plot(
-        y_train=y_train,
-        y_test=y_test,
-        class_names=class_names,
-        labels=labels,
-        output_dir=output_dir
-    )
-
-    # Per-class F1 score graph.
-    save_per_class_f1_plot(
-        report_dict=report_dict,
-        output_dir=output_dir
-    )
-
-    # Multiclass ROC curve.
-    roc_auc_scores = save_multiclass_roc_curve(
-        model=rf,
-        X_test=X_test,
-        y_test=y_test,
-        labels=labels,
-        class_names=class_names,
-        output_dir=output_dir
-    )
-
-    # Save full metrics.
-    metrics = {
-        "model": "Random Forest Classifier",
+    results = {
+        "model": "Random Forest Regression",
         "target": target_col,
+        "owner_threshold_for_roc_and_truth_table": owner_threshold,
+        "roc_auc": roc_auc,
         "hyperparameters": {
-            "n_estimators": 100,
-            "random_state": 3245,
-            "class_weight": "balanced"
+            "n_estimators": n_estimators,
+            "max_depth": max_depth,
+            "min_samples_split": min_samples_split,
+            "min_samples_leaf": min_samples_leaf,
+            "random_state": seed,
         },
-        "train_n": int(len(df_train)),
-        "test_n": int(len(df_test)),
-        "classes": {
-            str(label): get_class_name(label)
-            for label in labels
+        "splits": {
+            "train_n": len(training_rows),
+            "val_n": len(validation_rows),
+            "test_n": len(test_rows)
         },
-        "classification_report": report_dict,
-        "roc_auc_scores": roc_auc_scores,
+        "metrics": {
+            "train": {
+                "mse": mse(y_train, yhat_train),
+                "mae": mae(y_train, yhat_train),
+                "r2": r2_score(y_train, yhat_train),
+            },
+            "validate": {
+                "mse": mse(y_valid, yhat_valid),
+                "mae": mae(y_valid, yhat_valid),
+                "r2": r2_score(y_valid, yhat_valid),
+            },
+            "test": {
+                "mse": mse(y_test, yhat_test),
+                "mae": mae(y_test, yhat_test),
+                "r2": r2_score(y_test, yhat_test),
+            },
+        },
         "feature_importances": {
             feature: float(importance)
-            for feature, importance in zip(X_train.columns, rf.feature_importances_)
-        }
+            for feature, importance in zip(feature_cols, rfr.feature_importances_)
+        },
     }
 
+    return results
+
+
+def main():
+    # You can run this file either by passing the CSV path:
+    #   python RandomForest.py steam_games_dataset_clean.csv
+    #
+    # Or by setting the default path below.
+    if len(sys.argv) >= 2:
+        data_file = sys.argv[1]
+    else:
+        data_file = r"C:\Users\gregc\OneDrive\Desktop\Data_Mining_Steam_Project\data\steam_games_dataset_clean.csv"
+
+    seed = 3245
+    target_col = "estimated_owners"
+
+    output_dir = "./random_forest_regression_outputs"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Hyperparameters
+    n_estimators = 100
+    max_depth = None       # None = grow trees until leaves are pure
+    min_samples_split = 2
+    min_samples_leaf = 1
+
+    df = load_data(data_file)
+    df, feature_cols = clean_numeric_data(df, target_col)
+
+    results = train_and_eval(
+        df=df,
+        feature_cols=feature_cols,
+        target_col=target_col,
+        seed=seed,
+        output_dir=output_dir,
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        min_samples_split=min_samples_split,
+        min_samples_leaf=min_samples_leaf,
+    )
+
+    # Output results to json
     with open(os.path.join(output_dir, "metrics.json"), "w") as f:
-        json.dump(metrics, f, indent=2)
+        json.dump(results, f, indent=2)
+
+    # Print summary
+    print(f"Model: {results['model']}")
+    print(f"Seed: {seed}")
+    print(f"Target label: {target_col}")
+    print(f"Split sizes: train={results['splits']['train_n']}, valid={results['splits']['val_n']}, test={results['splits']['test_n']}")
+    print(f"ROC/truth-table threshold: estimated_owners >= {results['owner_threshold_for_roc_and_truth_table']:.4f}")
+    print(f"ROC AUC: {results['roc_auc']:.4f}")
+    print(f"Number of features used: {len(feature_cols)}")
+    print(f"Hyperparameters: {results['hyperparameters']}")
+
+    print("\nRandom Forest Regression:")
+    for split in ["train", "validate", "test"]:
+        m = results["metrics"][split]
+        print(f"  {split.upper()}: MSE={m['mse']:.4f}  MAE={m['mae']:.4f}  R2={m['r2']:.4f}")
 
     print("\nFiles created:")
     print(os.path.join(output_dir, "metrics.json"))
-    print(os.path.join(output_dir, "classification_report.csv"))
-    print(os.path.join(output_dir, "prediction_table.csv"))
-    print(os.path.join(output_dir, "truth_table.csv"))
-    print(os.path.join(output_dir, "confusion_matrix.png"))
-    print(os.path.join(output_dir, "feature_importances.png"))
-    print(os.path.join(output_dir, "class_distribution.csv"))
-    print(os.path.join(output_dir, "class_distribution.png"))
-    print(os.path.join(output_dir, "per_class_f1_scores.csv"))
-    print(os.path.join(output_dir, "per_class_f1_scores.png"))
     print(os.path.join(output_dir, "roc_curve.png"))
-    print(os.path.join(output_dir, "roc_auc_scores.json"))
+    print(os.path.join(output_dir, "truth_table.csv"))
+    print(os.path.join(output_dir, "prediction_table.csv"))
+    print(os.path.join(output_dir, "actual_vs_predicted.png"))
+    print(os.path.join(output_dir, "residual_plot.png"))
+    print(os.path.join(output_dir, "error_histogram.png"))
+    print(os.path.join(output_dir, "feature_importances.png"))
 
-    print("\ndone!")
+
+if __name__ == "__main__":
+    main()

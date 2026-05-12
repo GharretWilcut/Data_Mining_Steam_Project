@@ -204,6 +204,25 @@ def save_roc_curve(fpr: np.ndarray, tpr: np.ndarray, auc: float, output_path: st
     plt.close()
 
 
+def save_coefficients_plot(feature_cols: List[str], coef: np.ndarray, output_path: str):
+    coef_series = pd.Series(coef, index=feature_cols)
+
+    # Take the top 20 by absolute value
+    coef_series = coef_series.reindex(
+        coef_series.abs().sort_values(ascending=False).head(20).index
+    )
+
+    plt.figure(figsize=(10, 6))
+    coef_series.sort_values().plot(kind="barh")
+
+    plt.xlabel("Coefficient Value")
+    plt.ylabel("Feature")
+    plt.title("Top 20 Linear Regression Coefficients by Absolute Value")
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300)
+    plt.close()
+
+
 def confusion_truth_table(y_binary: np.ndarray, y_scores: np.ndarray, threshold: float) -> pd.DataFrame:
     y_pred_binary = (y_scores >= threshold).astype(int)
 
@@ -276,6 +295,9 @@ def train_and_eval(
     prediction_table_path = os.path.join(output_dir, "prediction_table.csv")
     prediction_table.to_csv(prediction_table_path, index=False)
 
+    coef_path = os.path.join(output_dir, "top_coefficients.png")
+    save_coefficients_plot(feature_cols, model.coef_, coef_path)
+
     results = {
         "target": target_col,
         "owner_threshold_for_roc_and_truth_table": owner_threshold,
@@ -309,7 +331,8 @@ def train_and_eval(
         "output_files": {
             "roc_curve": roc_path,
             "truth_table": truth_table_path,
-            "prediction_table": prediction_table_path
+            "prediction_table": prediction_table_path,
+            "top_coefficients": coef_path
         },
         "feature_standardization": {
             "features": feature_cols,
@@ -324,7 +347,7 @@ def train_and_eval(
 def main():
     # Change this path to your CSV or DB file.
     # Example CSV:
-    data_file = r"C:\Users\gregc\OneDrive\Desktop\git\Data_Mining_Steam_Project\data\steam_games_dataset_clean.csv"
+    data_file = r"C:\Users\gregc\OneDrive\Desktop\Data_Mining_Steam_Project\data\steam_games_dataset_clean.csv"
 
     # If you want to pass the file path from the terminal instead, run:
     # python Linear_Regression_Only.py path_to_your_file.csv
@@ -384,6 +407,7 @@ def main():
     print(f"- {results['output_files']['roc_curve']}")
     print(f"- {results['output_files']['truth_table']}")
     print(f"- {results['output_files']['prediction_table']}")
+    print(f"- {results['output_files']['top_coefficients']}")
 
 
 if __name__ == "__main__":
